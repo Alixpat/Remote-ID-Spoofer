@@ -26,6 +26,12 @@ This project provides:
 
 ## Getting Started
 
+### Hardware Requirements
+To use this project, you will need the Seeed XIAO ESP32-S3 microcontroller, which features:
+- Dual-core processor
+- WiFi and Bluetooth capabilities
+- Compact size for easy integration
+
 1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/esp-wifi-remoteid-spoofer.git
@@ -39,6 +45,18 @@ This project provides:
    - Launch the Flask app: `python mapper.py`
    - Select your USB serial port on the initial screen.
    - Use the Web UI to design flight paths and control playback.
+
+### Firmware Upload
+To upload the firmware to the Seeed XIAO ESP32-S3:
+1. Connect the XIAO ESP32-S3 to your computer via USB.
+2. Open the Arduino IDE and select the appropriate board and port.
+3. Upload the firmware code to the device.
+
+### Running the Web Simulator
+To run the web simulator:
+1. Ensure the XIAO ESP32-S3 is connected and the firmware is uploaded.
+2. Open a web browser and navigate to `http://localhost:5000`.
+3. Use the Web UI to start simulating drone operations.
 
 ## License
 
