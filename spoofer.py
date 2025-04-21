@@ -98,7 +98,7 @@ HTML = """
   #control {
     position: absolute;
     top: 10px;
-    left: 10px;
+    right: 20px;
     background: rgba(0,0,0,0.8);
     padding: 15px;
     border: 1px solid lime;
@@ -106,10 +106,35 @@ HTML = """
     z-index: 1000;
     width: 280px;
     box-sizing: border-box;
+    text-align: center;
   }
-  #pilotControl { position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.8); padding:10px; border:1px solid #FF00FF; border-radius:6px; z-index:1000; }
+  /* Removed #pilotControl styles */
   #serialStatus { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.8); padding:5px; border:1px solid lime; border-radius:6px; font-family:monospace; z-index:1000;}
-  #control input, #control select { display:block; width:100%; margin:5px 0; background:#222; color:lime; border:1px solid lime; padding:5px; cursor:text; }
+  /* Uniform styling for all controls */
+  #control label, #control input, #control select, #control button {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    box-sizing: border-box;
+  }
+  #control label {
+    text-align: left;
+    margin-top: 0;
+  }
+  #control input, #control select {
+    background: #222;
+    color: lime;
+    border: 1px solid lime;
+    padding: 6px;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  #control button {
+    background: transparent;
+    padding: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
   #control button#setPilot { background:transparent; border:1px solid #FF00FF !important; color:#FF00FF !important; cursor:pointer; }
   #control button#play { background:transparent; border:1px solid green !important; color:green !important; cursor:pointer; }
   #control button#pause { background:transparent; border:1px solid orange !important; color:orange !important; cursor:pointer; }
@@ -117,6 +142,26 @@ HTML = """
   .leaflet-control-attribution { display:none !important; }
   @keyframes flashPurple { 0%{background-color:purple;}100%{background-color:transparent;} }
   .flashPurple { animation:flashPurple 0.3s ease; background-color:purple !important; }
+  #clearPathsContainer {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1000;
+    text-align: center;
+  }
+  #clearPaths {
+      background: purple;
+      border: 1px solid lime;
+      border-radius: 6px;
+      color: lime;
+      padding: 5px 10px;
+      font-family: monospace;
+      cursor: pointer;
+  }
+  #clearPaths:hover {
+      background: purple;
+      color: lime;
+  }
 </style>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -131,28 +176,34 @@ HTML = """
 <body>
 <div id="map"></div>
 <div id="control">
-  <label style="color:#FF00FF;">Remote ID:
-    <input id="basicId" placeholder="Remote ID"/>
-  </label>
-  <label style="color:#FF00FF;">Altitude (m):
-    <input id="alt" type="number" value="100"/>
-  </label>
-  <label style="color:#FF00FF;">Speed (mph):
-    <input id="speed" type="number" value="25"/>
-  </label>
-  <label style="color:#FF00FF;">Pilot ID:
-    <input id="pilotId" placeholder="Pilot ID"/>
-  </label>
-  <div style="border:1px solid lime; padding:5px; margin-bottom:10px; text-align:center;">
+  <div id="controlBody">
+    <label style="color:#FF00FF;">Remote ID:
+      <input id="basicId" placeholder="Remote ID"/>
+    </label>
+    <label style="color:#FF00FF;">Altitude (m):
+      <input id="alt" type="number" value="100"/>
+    </label>
+    <label style="color:#FF00FF;">Speed (mph):
+      <input id="speed" type="number" value="25"/>
+    </label>
+    <label style="color:#FF00FF; margin-top:8px;">Pilot ID:
+      <input id="pilotId" placeholder="Pilot ID"/>
+    </label>
     <button id="setPilot">Set Pilot Location</button>
-  </div>
-  <div style="display:flex; justify-content:space-between;">
-    <button id="play" style="flex:1; margin-right:4px;">Play</button>
-    <button id="pause" style="flex:1; margin:0 4px;">Pause</button>
-    <button id="stop" style="flex:1; margin-left:4px;">Stop</button>
-  </div>
-</div>
+    <small style="color:#7DF9FF; display:block; text-align:center; margin-top:4px;">
+      Select pilot location before pressing play
+    </small>
+    <div style="display:flex; justify-content:space-between; margin-top:10px;">
+      <button id="play" style="width:32%; margin:0;">Play</button>
+      <button id="pause" style="width:32%; margin:0;">Pause</button>
+      <button id="stop" style="width:32%; margin:0;">Stop</button>
+    </div>
+  </div>  <!-- end of controlBody -->
+</div>  <!-- end of control -->
 <div id="serialStatus"></div>
+<div id="clearPathsContainer">
+  <button id="clearPaths">Clear Paths</button>
+</div>
 <script>
   var map = L.map('map',{attributionControl:false}).setView([0,0],3);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
@@ -317,6 +368,26 @@ HTML = """
   }
   setInterval(updateSerialStatus,1000);
   updateSerialStatus();
+  // Clear all waypoints and path data
+  document.getElementById('clearPaths').onclick = () => {
+    // Remove existing waypoint markers
+    waypointMarkers.forEach(m => map.removeLayer(m));
+    waypointMarkers = [];
+    // Clear the polyline
+    path = [];
+    poly.setLatLngs(path);
+    // Remove loop line, first and last highlights
+    if (loopLine) { map.removeLayer(loopLine); loopLine = null; }
+    if (firstHighlight) { map.removeLayer(firstHighlight); firstHighlight = null; }
+    if (lastHighlight) { map.removeLayer(lastHighlight); lastHighlight = null; }
+    // Remove drone marker and status circle
+    if (droneMarker) { map.removeLayer(droneMarker); droneMarker = null; }
+    if (statusCircle) { map.removeLayer(statusCircle); statusCircle = null; }
+    // Reset simulation state
+    simIndex = null;
+    segmentOffset = 0;
+    playing = false;
+  };
 </script>
 </body>
 </html>
