@@ -2,7 +2,6 @@
 
 ![WiFi Remote ID Spoofer & Simulator Logo](spoof.png)
 
-**Disclaimer:** This software is intended for educational and research purposes only...
 
 **Disclaimer:** This software is intended for educational and research purposes only. It is your responsibility to ensure compliance with all local, national, and international laws and regulations regarding radio transmissions, privacy, and aviation safety. The authors and distributors of this software are not liable for any misuse or legal violations that may result. Always obtain proper authorization before transmitting any signals or simulating devices in real-world environments.
 
