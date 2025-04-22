@@ -14,18 +14,13 @@ This project provides:
 
 ## Features
 
-- **Dynamic MAC Spoofing**: Auto-generates a randomized suffix after a fixed `60:60:1F` prefix on each boot; user can override via Web UI.
+- **MAC Spoofing**: Change your desired oui in the firmware code.
 - **Map-based Flight Planner**: Click to drop waypoints; waypoints are highlighted (start = lime green, end = hot purple), with optional loop-back indicator.
 - **Real-time Playback**: Play, Pause (orange highlight), and Stop (red highlight) controls. Pause retains current position; Stop halts all serial transmissions.
 - **Pilot Location Control**: Separate control box to select and lock pilot coordinates on the map.
 - **USB Serial Management**: Auto-detects and displays connection status; immediate red/green updates on connect/disconnect.
 - **JSON RPC Protocol**: Structured payloads include fields for `mac`, `drone_lat`, `drone_long`, `drone_altitude`, `pilot_lat`, `pilot_long`, `basic_id`, `status`, and more.
 
-## Ethics & Legality
-
-- **Compliance First**: Before deploying or testing, verify that spoofing WiFi signals is legal in your jurisdiction. Many countries have strict regulations around radio emissions and aviation safety.
-- **Responsible Use**: This tool should never be used to hinder, confuse, or endanger actual aircraft operations, law enforcement, or public safety.
-- **Non-endorsement**: The authors do not endorse any illicit use. You assume all risks and legal responsibilities.
 
 ## Getting Started
 
