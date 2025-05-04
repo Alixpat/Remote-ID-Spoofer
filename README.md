@@ -40,7 +40,7 @@ To use this project, you will need the Seeed XIAO ESP32-S3 microcontroller, whic
    pip install -r requirements.txt
    ```
 3. **Configure & Run**
-   - Launch the Flask app: `python mapper.py`
+   - Launch the Flask app: `python spoofer.py`
    - Select your USB serial port on the initial screen.
    - Use the Web UI to design flight paths and control playback.
 
