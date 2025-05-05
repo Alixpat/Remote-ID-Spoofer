@@ -1,4 +1,4 @@
-ju# WiFi Remote ID Spoofer & Simulator
+# WiFi Remote ID Spoofer & Simulator
 
 ![WiFi Remote ID Spoofer & Simulator Logo](spoof.png)
 
