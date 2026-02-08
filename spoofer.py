@@ -591,7 +591,7 @@ HTML = """
 
 <div id="serialStatus"></div>
 <script>
-var map=L.map('map',{attributionControl:false}).setView([0,0],3);
+var map=L.map('map',{attributionControl:false}).setView([39.8,-98.6],4);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
 
 var waypointMarkers=[],path=[],poly=L.polyline(path,{color:'lime'}).addTo(map);
