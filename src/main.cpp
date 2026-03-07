@@ -6,6 +6,7 @@
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <cstring>
+#include <cmath>
 #include "opendroneid.h"
 #include "odid_wifi.h"
 
@@ -65,13 +66,30 @@ static bool    g_5g_ch_enabled[5] = {true, true, true, true, true};
 
 // ── default config (edit these for standalone operation) ──
 // Set AUTOSTART to true to broadcast on boot without web UI
-#define AUTOSTART       false
+#define AUTOSTART       true
 #define DEFAULT_ID      "FRAT0000000001"
-#define DEFAULT_LAT     48.8220        // drone start lat
-#define DEFAULT_LON     2.2700         // drone start lon
-#define DEFAULT_ALT     80             // altitude meters
+#define DEFAULT_ALT     80             // base altitude meters
 #define DEFAULT_PLAT    48.8215        // pilot lat
 #define DEFAULT_PLON    2.2695         // pilot lon
+
+// ── autonomous flight plan ──
+// FLIGHT_LOOP: true = loop forever, false = stop at last waypoint
+// FLIGHT_SPEED_KMH: ground speed in km/h
+// ALT_VARIATION: random altitude drift +/- meters (0 = fixed altitude)
+
+#define FLIGHT_LOOP       true
+#define FLIGHT_SPEED_KMH  25.0
+#define ALT_VARIATION     15
+
+// Waypoint table: {lat, lon} — edit to suit your test area
+// Default: a rectangle around Île Saint-Germain, Issy-les-Moulineaux
+static const double WAYPOINTS[][2] = {
+    {48.8225, 2.2680},   // WP0 - south-west
+    {48.8240, 2.2680},   // WP1 - north-west
+    {48.8240, 2.2730},   // WP2 - north-east
+    {48.8225, 2.2730},   // WP3 - south-east
+};
+static const size_t NUM_WAYPOINTS = sizeof(WAYPOINTS) / sizeof(WAYPOINTS[0]);
 
 static char    g_basic_id[ODID_ID_SIZE + 1] = "";
 static double  g_drone_lat  = 0.0;
@@ -90,6 +108,85 @@ static bool    buzzerMuted = false;
 static bool    ledMuted    = false;
 
 static const uint16_t TX_INTERVAL_MS = 1000;
+
+// ── flight state machine ──
+static size_t  g_wp_current    = 0;     // current target waypoint index
+static double  g_wp_progress   = 0.0;   // 0.0 = at previous WP, 1.0 = at current WP
+static bool    g_flight_done   = false;
+static unsigned long g_last_flight_ms = 0;
+
+// Haversine distance in meters between two lat/lon points
+static double haversine_m(double lat1, double lon1, double lat2, double lon2) {
+    const double R = 6371000.0;
+    double dLat = (lat2 - lat1) * M_PI / 180.0;
+    double dLon = (lon2 - lon1) * M_PI / 180.0;
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+               cos(lat1 * M_PI / 180.0) * cos(lat2 * M_PI / 180.0) *
+               sin(dLon / 2) * sin(dLon / 2);
+    return R * 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
+}
+
+// Advance the flight plan by dt_ms milliseconds, update g_drone_lat/lon/alt
+static void flight_tick(unsigned long dt_ms) {
+    if (g_flight_done || NUM_WAYPOINTS < 2) return;
+
+    size_t wp_prev = (g_wp_current == 0) ? NUM_WAYPOINTS - 1 : g_wp_current - 1;
+    // On first tick, start from WP0 heading to WP1
+    if (g_wp_current == 0 && g_wp_progress == 0.0) {
+        g_drone_lat = WAYPOINTS[0][0];
+        g_drone_lon = WAYPOINTS[0][1];
+        g_wp_current = 1;
+        wp_prev = 0;
+    }
+
+    double seg_dist = haversine_m(
+        WAYPOINTS[wp_prev][0], WAYPOINTS[wp_prev][1],
+        WAYPOINTS[g_wp_current][0], WAYPOINTS[g_wp_current][1]);
+
+    if (seg_dist < 0.1) seg_dist = 0.1;  // avoid div by zero
+
+    double speed_ms = FLIGHT_SPEED_KMH / 3.6;
+    double dt_s = dt_ms / 1000.0;
+    double advance = (speed_ms * dt_s) / seg_dist;
+
+    g_wp_progress += advance;
+
+    // Reached current waypoint?
+    while (g_wp_progress >= 1.0) {
+        g_wp_progress -= 1.0;
+        wp_prev = g_wp_current;
+        g_wp_current++;
+
+        if (g_wp_current >= NUM_WAYPOINTS) {
+            if (FLIGHT_LOOP) {
+                g_wp_current = 0;
+            } else {
+                g_drone_lat = WAYPOINTS[NUM_WAYPOINTS - 1][0];
+                g_drone_lon = WAYPOINTS[NUM_WAYPOINTS - 1][1];
+                g_flight_done = true;
+                return;
+            }
+        }
+
+        seg_dist = haversine_m(
+            WAYPOINTS[wp_prev][0], WAYPOINTS[wp_prev][1],
+            WAYPOINTS[g_wp_current][0], WAYPOINTS[g_wp_current][1]);
+        if (seg_dist < 0.1) seg_dist = 0.1;
+    }
+
+    // Interpolate position
+    g_drone_lat = WAYPOINTS[wp_prev][0] +
+                  (WAYPOINTS[g_wp_current][0] - WAYPOINTS[wp_prev][0]) * g_wp_progress;
+    g_drone_lon = WAYPOINTS[wp_prev][1] +
+                  (WAYPOINTS[g_wp_current][1] - WAYPOINTS[wp_prev][1]) * g_wp_progress;
+
+    // Altitude variation
+    #if ALT_VARIATION > 0
+    g_drone_alt = DEFAULT_ALT + (int)(random(-ALT_VARIATION, ALT_VARIATION + 1));
+    #else
+    g_drone_alt = DEFAULT_ALT;
+    #endif
+}
 
 // ── buzzer ──
 
@@ -401,18 +498,22 @@ void setup() {
     #if AUTOSTART
     strncpy(g_basic_id, DEFAULT_ID, ODID_ID_SIZE);
     g_basic_id[ODID_ID_SIZE] = '\0';
-    g_drone_lat = DEFAULT_LAT;
-    g_drone_lon = DEFAULT_LON;
+    g_drone_lat = WAYPOINTS[0][0];
+    g_drone_lon = WAYPOINTS[0][1];
     g_drone_alt = DEFAULT_ALT;
     g_pilot_lat = DEFAULT_PLAT;
     g_pilot_lon = DEFAULT_PLON;
     g_has_data = true;
     broadcastEnabled = true;
+    g_last_flight_ms = millis();
     update_ap_ssid();
     startBeep();
-    Serial.println("AUTOSTART: broadcasting with default config");
-    Serial.printf("  ID=%s lat=%.4f lon=%.4f alt=%d\n",
-                  g_basic_id, g_drone_lat, g_drone_lon, g_drone_alt);
+    Serial.println("AUTOSTART: autonomous flight mode");
+    Serial.printf("  ID=%s  WPs=%d  speed=%.0fkm/h  loop=%s\n",
+                  g_basic_id, NUM_WAYPOINTS, FLIGHT_SPEED_KMH,
+                  FLIGHT_LOOP ? "yes" : "no");
+    Serial.printf("  start=%.4f,%.4f  alt=%dm\n",
+                  g_drone_lat, g_drone_lon, g_drone_alt);
     #endif
 }
 
@@ -534,12 +635,31 @@ void loop() {
         return;
     }
 
+    // Autonomous flight: advance position along waypoints
+    #if AUTOSTART
+    {
+        unsigned long now = millis();
+        unsigned long dt = now - g_last_flight_ms;
+        if (dt > 0) {
+            flight_tick(dt);
+            g_last_flight_ms = now;
+        }
+    }
+    #endif
+
     if (millis() - lastTx >= TX_INTERVAL_MS) {
         lastTx = millis();
         inject_odid(g_basic_id, g_drone_lat, g_drone_lon, g_drone_alt, g_pilot_lat, g_pilot_lon);
         heartbeatTick();
         ledFlash(20);
         const char *bstr = g_band_mode == 0 ? "2.4G" : g_band_mode == 1 ? "5G" : "DUAL";
-        Serial.printf("TX lat=%.4f lon=%.4f alt=%d band=%s\n", g_drone_lat, g_drone_lon, g_drone_alt, bstr);
+        #if AUTOSTART
+        Serial.printf("TX lat=%.4f lon=%.4f alt=%d band=%s wp=%d/%d\n",
+                      g_drone_lat, g_drone_lon, g_drone_alt, bstr,
+                      (int)g_wp_current, (int)NUM_WAYPOINTS);
+        #else
+        Serial.printf("TX lat=%.4f lon=%.4f alt=%d band=%s\n",
+                      g_drone_lat, g_drone_lon, g_drone_alt, bstr);
+        #endif
     }
 }
