@@ -1344,7 +1344,7 @@ def start():
     data = request.get_json()
     if not data:
         return jsonify(status='error', msg='no payload'), 400
-    start_cmd = {"action": "start", "basic_id": data.get("basic_id", ""), "drone_altitude": data.get("drone_altitude", 0)}
+    start_cmd = {"action": "start", "basic_id": data.get("basic_id", ""), "drone_altitude": data.get("drone_altitude", 0), "unix_time": int(time.time())}
     safe_serial_write(json.dumps(start_cmd))
     try:
         with open(PATH_CSV, 'a', newline='') as f:

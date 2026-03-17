@@ -10,6 +10,7 @@
 #include <algorithm>
 #include "opendroneid.h"
 #include "odid_wifi.h"
+#include <sys/time.h>
 
 #if defined(M5STAMP_S3)
   #include <Adafruit_NeoPixel.h>
@@ -80,6 +81,8 @@ static bool    g_5g_ch_enabled[5] = {true, true, true, true, true};
 #define DEFAULT_ALT     80             // altitude meters
 #define DEFAULT_PLAT    48.8215        // pilot lat
 #define DEFAULT_PLON    2.2695         // pilot lon
+
+#define ODID_UNIX_EPOCH_2019 1546300800UL
 
 static char    g_basic_id[ODID_ID_SIZE + 1] = "";
 static double  g_drone_lat  = 0.0;
@@ -224,12 +227,18 @@ static void fill_uas_data(ODID_UAS_Data *uas, const char *basic_id,
     uas->Location.VertAccuracy  = ODID_VER_ACC_10_METER;
     uas->Location.SpeedAccuracy = ODID_SPEED_ACC_1_METERS_PER_SECOND;
     uas->Location.TSAccuracy    = ODID_TIME_ACC_1_0_SECOND;
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    uas->Location.TimeStamp     = (float)(tv.tv_sec % 3600)
+                                + (float)(tv.tv_usec) / 1e6f;
     uas->LocationValid          = 1;
 
     odid_initSystemData(&uas->System);
     uas->System.OperatorLocationType = ODID_OPERATOR_LOCATION_TYPE_LIVE_GNSS;
     uas->System.OperatorLatitude     = pilot_lat;
     uas->System.OperatorLongitude    = pilot_lon;
+    uas->System.Timestamp            = (uint32_t)(tv.tv_sec - ODID_UNIX_EPOCH_2019);
     uas->SystemValid                 = 1;
 }
 
@@ -421,6 +430,13 @@ void loop() {
                 if (ledMuted) ledOff();
             }
 
+            if (doc.containsKey("unix_time")) {
+                uint32_t ut = doc["unix_time"].as<uint32_t>();
+                struct timeval tv = { .tv_sec = (time_t)ut, .tv_usec = 0 };
+                settimeofday(&tv, NULL);
+                Serial.printf("Clock synced: %u\n", ut);
+            }
+
             if (doc.containsKey("band_mode")) {
                 uint8_t bm = doc["band_mode"].as<uint8_t>();
                 #if DUAL_BAND
@@ -430,6 +446,7 @@ void loop() {
                 #endif
                 Serial.printf("Band mode: %d\n", g_band_mode);
             }
+
             if (doc.containsKey("channels_5g")) {
                 JsonArray ch = doc["channels_5g"].as<JsonArray>();
                 if (ch) {
